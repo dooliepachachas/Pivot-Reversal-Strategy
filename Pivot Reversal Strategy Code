@@ -1,0 +1,90 @@
+
+[IntrabarOrderGeneration = false]
+
+inputs: 
+	Price( Low ) [DisplayName = "Price", ToolTip = 
+	 "Enter an EasyLanguage expression to use for pivot low determination."], 
+	LeftStrength( 4 ) [DisplayName = "LeftStrength", ToolTip = 
+	 "Enter the number of bars to the left of the current bar to be analyzed to see if the price of those bars is greater than the price of the current bar."], 
+	RightStrength( 2 ) [DisplayName = "RightStrength", ToolTip = 
+	 "Enter the number of bars to the right of the current bar to be analyzed to see if the price of those bars is greater than the price of the current bar."],
+	Instance( numericsimple ), 
+	Price( numericseries ), 
+	LeftStrength( numericsimple ), 
+	RightStrength( numericsimple ), 
+	Length( numericsimple ),
+	HiLo( numericsimple ), //pass in 1 for PivotHigh(Bar), -1 for PivotLow(Bar)
+	oPivotPrice( numericref ), 
+	oPivotBar( numericref );
+	
+variables: 
+	oPivotPrice( 0 ), 
+	oPivotBar( 0 ),
+	CandidatePrice( 0 ), 
+	LengthCntr( 0 ), 
+	StrengthCntr( 0 ), 
+	InstanceCntr( 0 ), 
+	PivotTest( false ), 
+	InstanceTest( false );
+
+//Pivot Logic
+InstanceCntr = 0 ;
+InstanceTest = false ;
+LengthCntr = RightStrength ; 
+while LengthCntr < Length and InstanceTest = false
+	begin
+	//Get next recent CandidatePrice & set Pivottest = true
+	CandidatePrice = Price[LengthCntr] ;
+	PivotTest = true ;
+	//Compare CandidatePrice to LeftStrength Bars on Left
+	StrengthCntr = LengthCntr + 1 ;
+	while PivotTest = true and StrengthCntr - LengthCntr <= LeftStrength 
+		begin
+		if ( HiLo = 1 and CandidatePrice < Price[StrengthCntr] )
+		 or ( HiLo = -1 and CandidatePrice > Price[StrengthCntr] ) then
+			PivotTest = false
+		else
+			StrengthCntr = StrengthCntr + 1 ;
+		end ;
+	//If CandidatePrice passed Left comparison, compare to RightStrength Bars on Right
+	StrengthCntr = LengthCntr - 1 ;
+	while PivotTest = true and LengthCntr - StrengthCntr <= RightStrength 
+		begin
+		if ( HiLo = 1 and CandidatePrice <= Price[StrengthCntr] )
+		 or ( HiLo = -1 and CandidatePrice >= Price[StrengthCntr] ) then
+			PivotTest = false
+		else
+			StrengthCntr = StrengthCntr - 1 ;
+		end ;
+	//If CandidatePrice passed overall as Pivot, increment InstanceCntr
+	if PivotTest = true then
+		InstanceCntr = InstanceCntr + 1 ;
+	//If InstanceCntr has reached count, then it is Pivot, 
+	//Else increment LengthCntr to prepare to get and check next candiddate price
+	if InstanceCntr = Instance then
+		InstanceTest = true
+	else
+		LengthCntr = LengthCntr + 1 ;
+	end ;
+if InstanceTest = true then
+	begin
+	oPivotPrice = CandidatePrice ;
+	oPivotBar = LengthCntr + ExecOffset ;
+	Pivot = 1 ; //return 1 if required pivot found
+	end
+else
+	begin
+	oPivotPrice = -1 ;
+	oPivotBar = -1 ;
+	Pivot = -1 ; //return -1 if required pivot not found
+	end ;
+
+//Pivot Low Logic
+Value1 = Pivot( Price, Length, LeftStrength, RightStrength, Instance, -1, oPivotPrice, 
+ oPivotBar );
+
+PivotLowVS = oPivotPrice;
+
+//Setup Logic
+if PivotLowVS( 1, Price, LeftStrength, RightStrength, RightStrength + 1 ) <> -1 then
+	Buy ( !( "PivExtLE" ) ) next bar at market;
